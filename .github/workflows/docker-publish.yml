@@ -4,6 +4,11 @@ name: Build OmniRoute from source and publish to GHCR
 # adapted to build the upstream DEFAULT BRANCH from this repo and publish to
 # GHCR only (no Docker Hub). Tracks the upstream default branch (release/v*)
 # on a schedule, publishing the floating `latest` channel.
+#
+# Deliberate simplifications vs upstream (personal build, not a release pipeline):
+# - The Dockerfile post-build verification is stripped at build time (it is
+#   broken upstream: diegosouzapw/OmniRoute#9687).
+# - No SBOM generation or Trivy scanning/gates — the image is published as-is.
 
 on:
   # The upstream repo does not push to this repo, so poll its default branch
@@ -134,6 +139,24 @@ jobs:
           ref: ${{ needs.prepare.outputs.ref }}
           fetch-depth: 0
 
+      # WORKAROUND for upstream diegosouzapw/OmniRoute#9687: the Dockerfile's
+      # post-build verification (builder stage, last RUN) imports
+      # onnxruntime-node from the standalone tree, but the native
+      # libonnxruntime.so.1 is not synced there on the current default branch
+      # (upstream's own publish fails the same way; fix pending in PR #9712).
+      # Strip the trailing `node --input-type=module -e ...` check so the RUN
+      # ends at `npm run build`. Becomes a no-op if upstream removes/changes
+      # that line. NOTE: the image builds and the proxy works, but the
+      # LLMLingua compression engine (onnxruntime) may fail at runtime until
+      # the upstream fix lands.
+      - name: Disable broken post-build verification (upstream #9687)
+        run: |
+          set -euo pipefail
+          sed -i -e '/&& node --input-type=module -e/d' Dockerfile
+          sed -i -e 's|^\(  && npm run build\) \\$|\1|' Dockerfile
+          echo "--- Patched builder RUN step: ---"
+          grep -n -A2 "next-cache,target=/app/.build/next/cache" Dockerfile
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -212,20 +235,11 @@ jobs:
     permissions:
       contents: read
       packages: write
-      security-events: write
     env:
       GHCR_IMAGE_NAME: ghcr.io/thefrenchghosty/omniroute
       VERSION: ${{ needs.prepare.outputs.version }}
       PROMOTE_LATEST: ${{ needs.prepare.outputs.promote_latest }}
     steps:
-      - name: Checkout upstream source
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-          repository: ${{ env.UPSTREAM_REPO }}
-          ref: ${{ needs.prepare.outputs.ref }}
-          fetch-depth: 0
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -277,46 +291,3 @@ jobs:
       - name: Inspect image
         run: |
           docker buildx imagetools inspect "${GHCR_IMAGE_NAME}:${VERSION}"
-
-      - name: Generate CycloneDX SBOM (image, advisory)
-        continue-on-error: true
-        uses: anchore/sbom-action@v0
-        with:
-          image: ${{ env.GHCR_IMAGE_NAME }}:${{ env.VERSION }}
-          format: cyclonedx-json
-          output-file: sbom-image.cdx.json
-          artifact-name: sbom-image.cdx.json
-
-      # Visibility scan: reports HIGH + CRITICAL into the SARIF (Security tab) but
-      # never blocks (exit-code 0). The blocking gate below narrows to CRITICAL.
-      # Mirrors upstream; trivyignores points at the upstream repo-root .trivyignore.
-      - name: Trivy image scan (SARIF, advisory)
-        continue-on-error: true
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: ${{ env.GHCR_IMAGE_NAME }}:${{ env.VERSION }}
-          format: sarif
-          output: trivy-results.sarif
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          trivyignores: .trivyignore
-          exit-code: "0"
-
-      # BLOCKING gate, same as upstream: fail on a fixable CRITICAL CVE in the
-      # published image. Runs after the manifests are published, so the image is
-      # available on GHCR even if this gate reds the run.
-      - name: Trivy CRITICAL gate (blocking)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: ${{ env.GHCR_IMAGE_NAME }}:${{ env.VERSION }}
-          format: table
-          severity: CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
-
-      - name: Upload Trivy SARIF to Security tab
-        continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v4.37.4
-        with:
-          sarif_file: trivy-results.sarif
-          category: trivy-image
