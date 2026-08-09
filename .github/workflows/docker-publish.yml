@@ -14,7 +14,7 @@ on:
   # The upstream repo does not push to this repo, so poll its default branch
   # daily and rebuild the floating `latest` channel.
   schedule:
-    - cron: "37 4 * * *"
+    - cron: "0 */3 * * *"
   # Rebuild when this workflow itself changes.
   push:
     paths:
