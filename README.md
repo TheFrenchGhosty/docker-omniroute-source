@@ -21,9 +21,17 @@ It exists only to publish self-built images to GHCR for those who prefer to run 
 - `ghcr.io/thefrenchghosty/omniroute:latest-web` - web image
 - `ghcr.io/thefrenchghosty/omniroute:<version>` - immutable version tags (built on demand)
 
-## Known limitations (2026-08-09)
+## Known limitations
 
-The current upstream default branch has a build bug ([diegosouzapw/OmniRoute#9687](https://github.com/diegosouzapw/OmniRoute/issues/9687), fix pending in [PR #9712](https://github.com/diegosouzapw/OmniRoute/pull/9712)): the standalone bundle is missing the onnxruntime native library, which fails upstream's own Docker publish. This repo works around it by stripping the Dockerfile's post-build verification step.
+### 2026-08-12: upstream tip does not compile
+
+The upstream default branch tip is currently broken upstream and fails to compile (tracked upstream as [diegosouzapw/OmniRoute#9985](https://github.com/diegosouzapw/OmniRoute/issues/9985); upstream's own Docker publish fails on every run). This repo applies a small vendored patch at build time ([patches/upstream-build-fixes.patch](patches/upstream-build-fixes.patch)) containing upstream's own pending fixes ([PR #10108](https://github.com/diegosouzapw/OmniRoute/pull/10108), plus one extra stale re-export removal in `catalog.ts`): a missing brace, an unclosed provider-catalog entry, a duplicate import, two bad import paths, an unresolved wasm URL, and a colliding migration.
+
+Once upstream merges their fixes, the patch stops applying cleanly and the workflow prints a warning instead of failing; the patch file and the "Apply upstream build fixes" step should then be removed.
+
+### 2026-08-09: onnxruntime native library missing
+
+The upstream default branch has a build bug ([diegosouzapw/OmniRoute#9687](https://github.com/diegosouzapw/OmniRoute/issues/9687); fix [PR #9712](https://github.com/diegosouzapw/OmniRoute/pull/9712) was closed unmerged): the standalone bundle is missing the onnxruntime native library, which fails upstream's own Docker publish. This repo works around it by stripping the Dockerfile's post-build verification step.
 
 Consequences for the published images:
 
@@ -31,7 +39,7 @@ Consequences for the published images:
 - **Memory with local transformers embeddings** (opt-in, off by default, lazy-loaded) is unavailable; API-based embedding providers are unaffected.
 - Everything else (all providers, combo routing/fallback, dashboard, MCP/A2A, auth, etc.) works normally.
 
-Once the upstream fix lands, the next scheduled build picks it up automatically and both features work again.
+Once an upstream fix lands, the next scheduled build picks it up automatically and both features work again.
 
 ## License
 
