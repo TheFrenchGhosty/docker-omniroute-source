@@ -149,10 +149,10 @@ jobs:
 
       # WORKAROUND for upstream diegosouzapw/OmniRoute#9985: the default branch
       # tip does not compile (Turbopack errors from the #9245 merge fallout).
-      # Apply our vendored minimal fixes (patches/upstream-build-fixes.patch).
-      # When upstream merges their own fixes (PRs #10108/#10102/#10131/#10094/
-      # #10140) the patch stops applying; the step then warns and continues,
-      # and the patch + this step should be removed.
+      # Apply our vendored copy of upstream's own fix PR #10131
+      # (patches/upstream-build-fixes.patch). When upstream merges their fixes
+      # the patch stops applying; the step then warns and continues, and the
+      # patch + this step should be removed.
       - name: Apply upstream build fixes (temporary)
         working-directory: upstream
         run: |

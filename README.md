@@ -25,7 +25,7 @@ It exists only to publish self-built images to GHCR for those who prefer to run 
 
 ### 2026-08-12: upstream tip does not compile
 
-The upstream default branch tip is currently broken upstream and fails to compile (tracked upstream as [diegosouzapw/OmniRoute#9985](https://github.com/diegosouzapw/OmniRoute/issues/9985); upstream's own Docker publish fails on every run). This repo applies a small vendored patch at build time ([patches/upstream-build-fixes.patch](patches/upstream-build-fixes.patch)) containing upstream's own pending fixes ([PR #10108](https://github.com/diegosouzapw/OmniRoute/pull/10108), plus one extra stale re-export removal in `catalog.ts`): a missing brace, an unclosed provider-catalog entry, a duplicate import, two bad import paths, an unresolved wasm URL, and a colliding migration.
+The upstream default branch tip is currently broken upstream and fails to compile (tracked upstream as [diegosouzapw/OmniRoute#9985](https://github.com/diegosouzapw/OmniRoute/issues/9985); upstream's own Docker publish fails on every run). This repo applies a vendored patch at build time ([patches/upstream-build-fixes.patch](patches/upstream-build-fixes.patch)) containing upstream's own pending fix [PR #10131](https://github.com/diegosouzapw/OmniRoute/pull/10131) verbatim: a missing brace, an unclosed provider-catalog entry, a duplicate import, wrong import depths, an unresolvable wasm URL, stale catalog re-exports, and a duplicate migration.
 
 Once upstream merges their fixes, the patch stops applying cleanly and the workflow prints a warning instead of failing; the patch file and the "Apply upstream build fixes" step should then be removed.
 
