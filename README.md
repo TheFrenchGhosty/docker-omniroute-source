@@ -11,7 +11,7 @@ OmniRoute is a free AI gateway: one OpenAI-compatible endpoint in front of hundr
 - Publishes the floating `latest` channel to `ghcr.io/thefrenchghosty/omniroute` (and `:latest-web` for the web build)
 - Optionally builds immutable version tags (`v*`) via `workflow_dispatch`
 
-Compared to upstream's publish workflow, all verification is disabled: no SBOM, no Trivy scans, and the Dockerfile's own post-build import check is stripped at build time (see below). The images are published as-is.
+Compared to upstream's publish workflow, the security checks are disabled: no SBOM and no Trivy scans. The images are published as-is.
 
 It exists only to publish self-built images to GHCR for those who prefer to run a build from source rather than the upstream's published images.
 
@@ -23,23 +23,12 @@ It exists only to publish self-built images to GHCR for those who prefer to run 
 
 ## Known limitations
 
-### 2026-08-12: upstream tip does not compile
+None currently. The images track the upstream default branch and build with the full upstream Dockerfile verification.
 
-The upstream default branch tip is currently broken upstream and fails to compile (tracked upstream as [diegosouzapw/OmniRoute#9985](https://github.com/diegosouzapw/OmniRoute/issues/9985); upstream's own Docker publish fails on every run). This repo applies a vendored patch at build time ([patches/upstream-build-fixes.patch](patches/upstream-build-fixes.patch)) containing upstream's own pending fix [PR #10131](https://github.com/diegosouzapw/OmniRoute/pull/10131) verbatim: a missing brace, an unclosed provider-catalog entry, a duplicate import, wrong import depths, an unresolvable wasm URL, stale catalog re-exports, and a duplicate migration.
+Resolved workarounds (kept for reference):
 
-Once upstream merges their fixes, the patch stops applying cleanly and the workflow prints a warning instead of failing; the patch file and the "Apply upstream build fixes" step should then be removed.
-
-### 2026-08-09: onnxruntime native library missing
-
-The upstream default branch has a build bug ([diegosouzapw/OmniRoute#9687](https://github.com/diegosouzapw/OmniRoute/issues/9687); fix [PR #9712](https://github.com/diegosouzapw/OmniRoute/pull/9712) was closed unmerged): the standalone bundle is missing the onnxruntime native library, which fails upstream's own Docker publish. This repo works around it by stripping the Dockerfile's post-build verification step.
-
-Consequences for the published images:
-
-- **LLMLingua prompt compression** (opt-in, off by default) does not apply; it fail-opens by design, so requests pass through uncompressed rather than erroring.
-- **Memory with local transformers embeddings** (opt-in, off by default, lazy-loaded) is unavailable; API-based embedding providers are unaffected.
-- Everything else (all providers, combo routing/fallback, dashboard, MCP/A2A, auth, etc.) works normally.
-
-Once an upstream fix lands, the next scheduled build picks it up automatically and both features work again.
+- **2026-08-12: upstream tip did not compile** ([diegosouzapw/OmniRoute#9985](https://github.com/diegosouzapw/OmniRoute/issues/9985)). This repo temporarily applied a vendored patch at build time (upstream's own pending fixes). Fixed upstream the same day by the merge of [PR #10131](https://github.com/diegosouzapw/OmniRoute/pull/10131); patch and workflow step removed.
+- **2026-08-09: onnxruntime native library missing from the standalone bundle** ([diegosouzapw/OmniRoute#9687](https://github.com/diegosouzapw/OmniRoute/issues/9687)), which failed the Dockerfile's post-build verification. This repo temporarily stripped that check. Upstream's own Docker publish now passes with the check intact, so the workaround was removed and LLMLingua prompt compression and local memory embeddings work in current images.
 
 ## License
 

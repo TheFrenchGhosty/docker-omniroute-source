@@ -5,21 +5,18 @@ name: Build OmniRoute from source and publish to GHCR
 # GHCR only (no Docker Hub). Tracks the upstream default branch (release/v*)
 # on a schedule, publishing the floating `latest` channel.
 #
-# Deliberate simplifications vs upstream (personal build, not a release pipeline):
-# - The Dockerfile post-build verification is stripped at build time (it is
-#   broken upstream: diegosouzapw/OmniRoute#9687).
-# - No SBOM generation or Trivy scanning/gates — the image is published as-is.
+# Deliberate simplification vs upstream (personal build, not a release pipeline):
+# no SBOM generation or Trivy scanning/gates; the image is published as-is.
 
 on:
   # The upstream repo does not push to this repo, so poll its default branch
   # daily and rebuild the floating `latest` channel.
   schedule:
     - cron: "0 */3 * * *"
-  # Rebuild when this workflow or the build patches change.
+  # Rebuild when this workflow itself changes.
   push:
     paths:
       - ".github/workflows/docker-publish.yml"
-      - "patches/**"
   workflow_dispatch:
     inputs:
       ref:
@@ -132,12 +129,6 @@ jobs:
     env:
       GHCR_IMAGE_NAME: ghcr.io/thefrenchghosty/omniroute
     steps:
-      - name: Checkout this repo (build patches)
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-          path: .ci
-
       - name: Checkout upstream source
         uses: actions/checkout@v7
         with:
@@ -145,43 +136,6 @@ jobs:
           repository: ${{ env.UPSTREAM_REPO }}
           ref: ${{ needs.prepare.outputs.ref }}
           fetch-depth: 0
-          path: upstream
-
-      # WORKAROUND for upstream diegosouzapw/OmniRoute#9985: the default branch
-      # tip does not compile (Turbopack errors from the #9245 merge fallout).
-      # Apply our vendored copy of upstream's own fix PR #10131
-      # (patches/upstream-build-fixes.patch). When upstream merges their fixes
-      # the patch stops applying; the step then warns and continues, and the
-      # patch + this step should be removed.
-      - name: Apply upstream build fixes (temporary)
-        working-directory: upstream
-        run: |
-          set -euo pipefail
-          if git apply --check ../.ci/patches/upstream-build-fixes.patch 2>/dev/null; then
-            git apply --verbose ../.ci/patches/upstream-build-fixes.patch
-            echo "Applied upstream-build-fixes.patch"
-          else
-            echo "::warning:: upstream-build-fixes.patch no longer applies cleanly. Upstream likely merged their fixes; remove the patch file and this step."
-          fi
-
-      # WORKAROUND for upstream diegosouzapw/OmniRoute#9687: the Dockerfile's
-      # post-build verification (builder stage, last RUN) imports
-      # onnxruntime-node from the standalone tree, but the native
-      # libonnxruntime.so.1 is not synced there on the current default branch
-      # (upstream's own publish fails the same way; the fix PR #9712 was closed
-      # unmerged). Strip the trailing `node --input-type=module -e ...` check so
-      # the RUN ends at `npm run build`. Becomes a no-op if upstream removes or
-      # changes that line. NOTE: the image builds and the proxy works, but the
-      # LLMLingua compression engine (onnxruntime) may fail at runtime until
-      # the upstream fix lands.
-      - name: Disable broken post-build verification (upstream #9687)
-        working-directory: upstream
-        run: |
-          set -euo pipefail
-          sed -i -e '/&& node --input-type=module -e/d' Dockerfile
-          sed -i -e 's|^\(  && npm run build\) \\$|\1|' Dockerfile
-          echo "--- Patched builder RUN step: ---"
-          grep -n -A2 "next-cache,target=/app/.build/next/cache" Dockerfile
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -197,7 +151,7 @@ jobs:
         id: build
         uses: docker/build-push-action@v7
         with:
-          context: upstream
+          context: .
           target: runner-base
           platforms: ${{ matrix.platform }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
@@ -213,7 +167,7 @@ jobs:
         id: build-web
         uses: docker/build-push-action@v7
         with:
-          context: upstream
+          context: .
           target: runner-web
           platforms: ${{ matrix.platform }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
